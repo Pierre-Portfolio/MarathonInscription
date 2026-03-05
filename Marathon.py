@@ -12,6 +12,8 @@ import time
 import random
 import hashlib
 import smtplib
+import threading
+import sys  # Pour sys.exit si besoin
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -20,19 +22,14 @@ from email.mime.multipart import MIMEMultipart
 
 URL_TO_CHECK = "https://www.marathondumedoc.com/inscription/"
 
-# --- LISTE DES DESTINATAIRES ---
+# --- LISTES DE DIFFUSION ---
+LISTE_VIP = ["petillion99@gmail.com"]
+LISTE_STANDARD = ["quentinlevdso@gmail.com"]
 
-# Liste des personnes qui veulent recevoir le mode "PANIQUE" (Spammé toutes les 2 min)
-VIP_EMAILS = ["petillion99@gmail.com"]
-
-# Liste des personnes qui veulent juste être prévenues (1 seul mail)
-STANDARD_EMAILS = ["quentinlevdso@gmail.com"]
-
-# Configuration Email (Gmail - Expéditeur)
+# Configuration Email
 EMAIL_SENDER = "pierre.elipse@gmail.com"
 EMAIL_PASSWORD = "mifz iexy csrq xsjr"
 
-# Intervalles de surveillance normaux
 MIN_INTERVAL = 50
 MAX_INTERVAL = 70
 
@@ -47,141 +44,119 @@ def get_content_hash(url):
         if response.status_code == 200:
             content = response.text
             return hashlib.md5(content.encode('utf-8')).hexdigest()
-        return None
+        else:
+            print(f"Erreur HTTP : {response.status_code}")
+            return None
     except Exception as e:
-        print(f"Erreur scrapping : {e}")
+        print(f"Erreur lors de la récupération de la page : {e}")
         return None
 
-def send_email(recipients_list, subject, message):
-    """
-    Fonction générique pour envoyer un email à une liste de destinataires.
-    Envoie le mail une seule fois.
-    """
+def send_email_to_list(recipients_list, subject, message):
     if not recipients_list:
         return
 
-    print(f"Envoi email à {len(recipients_list)} personne(s) : {subject}")
-
-    smtp_server = "smtp.gmail.com"
-    smtp_port = 587
+    print(f"[EMAIL] Envoi de '{subject}' à {len(recipients_list)} personnes...")
 
     try:
-        server = smtplib.SMTP(smtp_server, smtp_port)
+        server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(EMAIL_SENDER, EMAIL_PASSWORD)
 
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_SENDER
-        # On joint la liste pour le champ "To"
-        msg['To'] = ", ".join(recipients_list)
-        msg['Subject'] = subject
-        msg.attach(MIMEText(message, 'plain'))
-
-        server.send_message(msg)
-        server.quit()
-        print(f"-> Email envoyé avec succès.")
-    except Exception as e:
-        print(f"Erreur Email : {e}")
-
-def send_urgent_bombardment(subject, message):
-    """
-    Envoie l'email en mode BOMBARDEMENT (toutes les 2 min)
-    SEULEMENT à la liste VIP_EMAILS.
-    """
-
-    urgent_subject = "MARATHON DU MEDOC OUVERT PREND TA PLACE"
-    urgent_body = f"!!! URGENT !!! URGENT !!! URGENT !!!\n\n{message.upper()}\n\n\nLIEN DIRECT : {URL_TO_CHECK}\n\nALLEZ-Y MAINTENANT !!!"
-
-    smtp_server = "smtp.gmail.com"
-    smtp_port = 587
-
-    max_duration_minutes = 10
-    start_time = time.time()
-    count = 1
-
-    print("\n" + "#"*50)
-    print(f"!!! MODE BOMBARDEMENT POUR {VIP_EMAILS} !!!")
-    print("#"*50 + "\n")
-
-    while (time.time() - start_time) < (max_duration_minutes * 60):
-        try:
-            server = smtplib.SMTP(smtp_server, smtp_port)
-            server.starttls()
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-
+        for dest in recipients_list:
             msg = MIMEMultipart()
             msg['From'] = EMAIL_SENDER
-            msg['To'] = ", ".join(VIP_EMAILS) # Uniquement les VIPs ici
-            msg['Subject'] = urgent_subject
-            msg.attach(MIMEText(urgent_body, 'plain'))
+            msg['To'] = dest
+            msg['Subject'] = subject
+            msg.attach(MIMEText(message, 'plain'))
+            server.send_message(msg_email) # Correction: variable name was msg_email above, here msg
 
-            server.send_message(msg)
-            server.quit()
-            print(f"[SPAM] Email VIOLENT n°{count} envoyé aux VIPs !")
+        server.quit()
+        print("[EMAIL] SUCCÈS.")
+    except Exception as e:
+        print(f"[EMAIL] ERREUR CRITIQUE : {e}")
 
-        except Exception as e:
-            print(f"Erreur envoi email : {e}")
-
-        if (time.time() - start_time) < ((max_duration_minutes - 2) * 60):
-            print("Attente 2 minutes avant prochain envoi...")
-            time.sleep(120)
-            count += 1
-
-    print("Fin du cycle de bombardement.")
-
-# --- PROGRAMME PRINCIPAL ---
+def vip_resend_loop(subject, message):
+    print(">>> Démarrage du cycle VIP en arrière-plan...")
+    for i in range(1, 9):
+        time.sleep(120)
+        print(f">>> Rappel VIP n°{i}/8...")
+        send_email_to_list(LISTE_VIP, subject, message)
+    print(">>> Fin cycle VIP.")
 
 def main():
-    print(f"--- DÉMARRAGE DU SCRIPT ---")
+    print("------------------------------------------------")
+    print(" DÉMARRAGE DU SCRIPT MARATHON ")
+    print("------------------------------------------------")
+    print(f"URL : {URL_TO_CHECK}")
+    print(f"VIPs : {LISTE_VIP}")
+    print(f"Standards : {LISTE_STANDARD}")
+    print("------------------------------------------------")
 
-    # 1. Email de démarrage pour TOUT LE MONDE (VIP + Standard)
-    all_start = VIP_EMAILS + STANDARD_EMAILS
-    send_email(all_start, "[MARATHON] Script Démarré", "Le script de surveillance est actif.")
+    # Test de connexion Email au démarrage
+    print("Test de connexion au serveur Email...")
+    try:
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.quit()
+        print("-> Connexion Email OK !")
+    except Exception as e:
+        print(f"-> ERREUR CONNEXION EMAIL : {e}")
+        print("Le script ne peut pas envoyer de mails. Vérifiez vos identifiants.")
+        # On ne quitte pas forcément, pour tester le scraping, mais on avertit.
+
+    send_email_to_list(LISTE_VIP, "[MARATHON] Démarrage", "Le script est lancé.")
 
     current_hash = get_content_hash(URL_TO_CHECK)
+
     if current_hash is None:
-        print("Erreur critique : Impossible de récupérer la page initiale. Arrêt.")
+        print("Impossible de récupérer la page. Arrêt.")
         return
 
-    print("Référence initiale stockée. Surveillance en cours...")
+    print("Surveillance active. Attente du prochain cycle...")
     last_heartbeat_date = None
 
     while True:
-        now = datetime.now()
-        current_date = now.date()
+        try:
+            now = datetime.now()
+            current_date = now.date()
 
-        # 2. Heartbeat 9h00 pour TOUT LE MONDE
-        if now.hour >= 9 and last_heartbeat_date != current_date:
-            send_email(all_start, "[MARATHON] Point de contrôle 9h00", "Le script tourne toujours.")
-            last_heartbeat_date = current_date
+            # Heartbeat
+            if now.hour >= 9 and last_heartbeat_date != current_date:
+                send_email_to_list(LISTE_VIP, "[MARATHON] Check 9h", "Tout va bien.")
+                last_heartbeat_date = current_date
 
-        # Scrapping
-        sleep_time = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
-        # On n'affiche plus l'heure à chaque boucle pour ne pas polluer, ou on la garde
-        # time.sleep(sleep_time)
-        print(f"[{now.strftime('%H:%M:%S')}] Check dans {int(sleep_time)} sec...")
-        time.sleep(sleep_time)
+            # Scrapping
+            sleep_time = random.uniform(MIN_INTERVAL, MAX_INTERVAL)
+            print(f"[{now.strftime('%H:%M:%S')}] Attente de {int(sleep_time)}s avant vérification...")
+            time.sleep(sleep_time)
 
-        new_hash = get_content_hash(URL_TO_CHECK)
+            new_hash = get_content_hash(URL_TO_CHECK)
 
-        if new_hash and new_hash != current_hash:
-            alert_msg = "LA PAGE D'INSCRIPTION A CHANGÉ ! LES PLACES SONT PEUT-ÊTRE OUVERTES !"
-            alert_subject = "MARATHON DU MEDOC OUVERT PREND TA PLACE"
+            if new_hash and new_hash != current_hash:
+                print("!!! CHANGEMENT DÉTECTÉ !!!")
+                alert_subject = "[MARATHON DU MEDOC] INSCRIPTIONS OUVERTES"
+                alert_msg = f"La page d'inscription pour le marathon du médoc est ouverte ! Le lien est : {URL_TO_CHECK}"
 
-            # STRATÉGIE D'ALERTE :
+                all_recipients = LISTE_VIP + LISTE_STANDARD
+                send_email_to_list(all_recipients, alert_subject, alert_msg)
 
-            # A) On prévient tout le monde IMMÉDIATEMENT (1 seule fois)
-            # Cela inclus Pierre (VIP) et Quentin (Standard)
-            send_email(VIP_EMAILS + STANDARD_EMAILS, alert_subject, alert_msg)
+                threading.Thread(target=vip_resend_loop, args=(alert_subject, alert_msg)).start()
+                current_hash = new_hash
+            elif new_hash == current_hash:
+                pass
 
-            # B) On lance le mode BOMBARDEMENT uniquement pour Pierre (VIP)
-            # Cela va durer 10 minutes et spammer son téléphone
-            send_urgent_bombardment(alert_subject, alert_msg)
-
-            current_hash = new_hash
-            print("Surveillance reprise...")
-        elif new_hash == current_hash:
-            pass
+        except KeyboardInterrupt:
+            print("\nArrêt manuel du script.")
+            break
+        except Exception as e:
+            print(f"Erreur dans la boucle principale : {e}")
+            # On continue quand même au cas où ce serait une erreur réseau temporaire
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"ERREUR FATALE AU DÉMARRAGE : {e}")
+        print("Appuyez sur Entrée pour fermer...")
+        input()

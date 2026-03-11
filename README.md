@@ -1,6 +1,7 @@
 <h1 align="center">
-  MarathonInscription
+  <img src="./assets/images/github/header.png" alt="SIMarathon Inscription" />
 </h1>
+<img src="./assets/images/github/star.gif" alt="star" />
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=white" />

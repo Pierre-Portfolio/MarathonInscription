@@ -12,7 +12,7 @@
 
 ---
 
-# MarathonInscription – Surveillance automatique des inscriptions
+# Marathon Inscription – Surveillance automatique des inscriptions
 
 ## Aperçu
 Script Python qui scrape le site officiel du Marathon de Paris et envoie une notification dès que les inscriptions s'ouvrent — plus besoin de surveiller manuellement une page qui ne change pas.
